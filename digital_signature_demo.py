@@ -292,8 +292,8 @@ class DigitalSignatureDemoApp:
         # Khởi tạo cửa sổ chính
         self.root = root
         self.root.title("Mô phỏng chữ ký số RSA & Mã hóa XOR")
-        self.root.geometry("1300x800")
-        self.root.minsize(1150, 720)
+        self.root.geometry("1450x860")
+        self.root.minsize(1200, 700)
         
         # Biến trạng thái lưu trữ dữ liệu RSA
         self.current_key_pair: RSAKeyPair | None = None
@@ -333,16 +333,36 @@ class DigitalSignatureDemoApp:
         style = ttk.Style()
         if "clam" in style.theme_names():
             style.theme_use("clam") # Giao diện clam nhìn hiện đại hơn mặc định
-        style.configure("Header.TLabel", font=("Segoe UI", 18, "bold"))
-        style.configure("SubHeader.TLabel", font=("Segoe UI", 11, "bold"))
-        style.configure("Status.TLabel", font=("Segoe UI", 10))
-        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
-        style.configure("Warning.TLabel", font=("Segoe UI", 10, "bold"), foreground="red")
+        self.root.option_add("*Font", ("Segoe UI", 12))
+        self.root.option_add("*TCombobox*Listbox.font", ("Segoe UI", 12))
+        style.configure("TLabel", font=("Segoe UI", 12))
+        style.configure("TEntry", font=("Segoe UI", 12), padding=(8, 6))
+        style.configure("TButton", font=("Segoe UI", 12), padding=(10, 6))
+        style.configure("TCombobox", font=("Segoe UI", 12), padding=(8, 6))
+        style.configure("TLabelframe.Label", font=("Segoe UI", 13, "bold"))
+        style.configure("Header.TLabel", font=("Segoe UI", 24, "bold"))
+        style.configure("SubHeader.TLabel", font=("Segoe UI", 14, "bold"))
+        style.configure("Status.TLabel", font=("Segoe UI", 12))
+        style.configure("Accent.TButton", font=("Segoe UI", 12, "bold"), padding=(14, 8))
+        style.configure("Warning.TLabel", font=("Segoe UI", 12, "bold"), foreground="red")
 
     def _build_layout(self) -> None:
         """Cấu trúc layout chính chia thành các khu vực"""
-        outer = ttk.Frame(self.root, padding=10)
-        outer.pack(fill="both", expand=True)
+        canvas_container = ttk.Frame(self.root)
+        canvas_container.pack(fill="both", expand=True)
+
+        self.main_canvas = tk.Canvas(canvas_container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_container, orient="vertical", command=self.main_canvas.yview)
+        self.main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+
+        outer = ttk.Frame(self.main_canvas, padding=16)
+        self.main_canvas_window = self.main_canvas.create_window((0, 0), window=outer, anchor="nw")
+        outer.bind("<Configure>", self._update_scroll_region)
+        self.main_canvas.bind("<Configure>", self._resize_canvas_content)
+        self.main_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         
         # Header
         ttk.Label(
@@ -354,29 +374,29 @@ class DigitalSignatureDemoApp:
             outer,
             text="Demo: Nhập Password (XOR) -> Hash thông điệp mã hóa -> Ký bằng private key -> Hacker -> Người nhận giải mã và kiểm tra",
             style="Status.TLabel",
-            wraplength=1200,
-        ).pack(anchor="w", pady=(4, 10))
+            wraplength=1500,
+        ).pack(anchor="w", pady=(6, 14))
         
         # Khu vực 1: Khởi tạo khóa RSA
-        key_frame = ttk.LabelFrame(outer, text="1. Cài đặt khóa RSA", padding=10)
+        key_frame = ttk.LabelFrame(outer, text="1. Cài đặt khóa RSA", padding=14)
         key_frame.pack(fill="x")
         self._build_key_frame(key_frame)
         
         # Khu vực chính chia làm 3 cột: Gửi - Hack - Nhận
         content = ttk.Frame(outer)
-        content.pack(fill="both", expand=True, pady=(10, 10))
+        content.pack(fill="both", expand=True, pady=(14, 12))
         content.columnconfigure(0, weight=1, uniform="thirds")
         content.columnconfigure(1, weight=1, uniform="thirds")
         content.columnconfigure(2, weight=1, uniform="thirds")
         content.rowconfigure(0, weight=1)
-        
-        sender_frame = ttk.LabelFrame(content, text="2. Người gửi", padding=10)
-        hacker_frame = ttk.LabelFrame(content, text="3. Hacker", padding=10)
-        receiver_frame = ttk.LabelFrame(content, text="4. Người nhận", padding=10)
-        
-        sender_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        hacker_frame.grid(row=0, column=1, sticky="nsew", padx=6)
-        receiver_frame.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
+
+        sender_frame = ttk.LabelFrame(content, text="2. Người gửi", padding=14)
+        hacker_frame = ttk.LabelFrame(content, text="3. Hacker", padding=14)
+        receiver_frame = ttk.LabelFrame(content, text="4. Người nhận", padding=14)
+
+        sender_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        hacker_frame.grid(row=0, column=1, sticky="nsew", padx=8)
+        receiver_frame.grid(row=0, column=2, sticky="nsew", padx=(8, 0))
         
         self._build_sender_frame(sender_frame)
         self._build_hacker_frame(hacker_frame)
@@ -384,7 +404,20 @@ class DigitalSignatureDemoApp:
         
         # Thanh trạng thái dưới cùng
         status_bar = ttk.Label(outer, textvariable=self.status_var, style="Status.TLabel")
-        status_bar.pack(anchor="w", pady=(6, 0))
+        status_bar.pack(anchor="w", pady=(8, 0))
+
+    def _update_scroll_region(self, _event: tk.Event) -> None:
+        """Cập nhật vùng cuộn khi nội dung thay đổi kích thước."""
+        self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+
+    def _resize_canvas_content(self, event: tk.Event) -> None:
+        """Giữ nội dung luôn khớp theo chiều rộng khung nhìn."""
+        self.main_canvas.itemconfigure(self.main_canvas_window, width=event.width)
+
+    def _on_mousewheel(self, event: tk.Event) -> None:
+        """Cho phép cuộn toàn bộ giao diện bằng con lăn chuột trên Windows."""
+        if event.delta:
+            self.main_canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def _build_key_frame(self, frame: ttk.LabelFrame) -> None:
         """Khu vực nhập p, q, e và sinh khóa"""
@@ -396,33 +429,33 @@ class DigitalSignatureDemoApp:
         frame.columnconfigure(5, weight=1)
         
         ttk.Label(frame, text="p:").grid(row=0, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.p_var, width=18).grid(row=0, column=1, sticky="ew", padx=(4, 10))
+        ttk.Entry(frame, textvariable=self.p_var, width=20).grid(row=0, column=1, sticky="ew", padx=(6, 14))
         
         ttk.Label(frame, text="q:").grid(row=0, column=2, sticky="w")
-        ttk.Entry(frame, textvariable=self.q_var, width=18).grid(row=0, column=3, sticky="ew", padx=(4, 10))
+        ttk.Entry(frame, textvariable=self.q_var, width=20).grid(row=0, column=3, sticky="ew", padx=(6, 14))
         
         ttk.Label(frame, text="e:").grid(row=0, column=4, sticky="w")
-        ttk.Entry(frame, textvariable=self.e_var, width=18).grid(row=0, column=5, sticky="ew", padx=(4, 10))
+        ttk.Entry(frame, textvariable=self.e_var, width=20).grid(row=0, column=5, sticky="ew", padx=(6, 14))
         
         button_row = ttk.Frame(frame)
-        button_row.grid(row=1, column=0, columnspan=6, sticky="w", pady=(10, 10))
+        button_row.grid(row=1, column=0, columnspan=6, sticky="w", pady=(12, 12))
         
         ttk.Button(button_row, text="Tải khóa mẫu", style="Accent.TButton", command=self.load_sample_keys).pack(
-            side="left", padx=(0, 8)
+            side="left", padx=(0, 10)
         )
         ttk.Button(button_row, text="Sinh khóa ngẫu nhiên", command=self.generate_random_keys).pack(
-            side="left", padx=(0, 8)
+            side="left", padx=(0, 10)
         )
         ttk.Button(button_row, text="Cập nhật khóa từ giá trị nhập", command=self.update_keys_from_entries).pack(
             side="left"
         )
         
         # Labels hiển thị kết quả Public Key và Private Key
-        ttk.Label(frame, textvariable=self.public_key_var, style="SubHeader.TLabel", wraplength=1120).grid(
+        ttk.Label(frame, textvariable=self.public_key_var, style="SubHeader.TLabel", wraplength=1400).grid(
             row=2, column=0, columnspan=6, sticky="w"
         )
-        ttk.Label(frame, textvariable=self.private_key_var, wraplength=1120).grid(
-            row=3, column=0, columnspan=6, sticky="w", pady=(4, 0)
+        ttk.Label(frame, textvariable=self.private_key_var, wraplength=1400).grid(
+            row=3, column=0, columnspan=6, sticky="w", pady=(6, 0)
         )
 
     def _build_sender_frame(self, frame: ttk.LabelFrame) -> None:
@@ -430,25 +463,25 @@ class DigitalSignatureDemoApp:
         frame.columnconfigure(0, weight=1)
         
         ttk.Label(frame, text="Thông điệp cần gửi:").grid(row=0, column=0, sticky="w")
-        self.message_text = ScrolledText(frame, height=5, wrap="word", font=("Segoe UI", 10))
+        self.message_text = ScrolledText(frame, height=7, wrap="word", font=("Segoe UI", 12))
         self.message_text.grid(row=1, column=0, sticky="nsew")
         
         pwd_row = ttk.Frame(frame)
-        pwd_row.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        pwd_row.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         ttk.Label(pwd_row, text="Mật khẩu mã hóa (XOR):").pack(side="left")
-        ttk.Entry(pwd_row, textvariable=self.sender_password_var, show="*").pack(side="left", fill="x", expand=True, padx=(8, 0))
+        ttk.Entry(pwd_row, textvariable=self.sender_password_var, show="*").pack(side="left", fill="x", expand=True, padx=(10, 0))
         
         algo_row = ttk.Frame(frame)
-        algo_row.grid(row=3, column=0, sticky="ew", pady=(8, 8))
+        algo_row.grid(row=3, column=0, sticky="ew", pady=(10, 10))
         ttk.Label(algo_row, text="Thuật toán băm:").pack(side="left")
         algo_combo = ttk.Combobox(
             algo_row,
             textvariable=self.algorithm_var,
             values=list(HASH_ALGORITHMS.keys()),
             state="readonly",
-            width=16,
+            width=18,
         )
-        algo_combo.pack(side="left", padx=(8, 8))
+        algo_combo.pack(side="left", padx=(10, 10))
         ttk.Button(algo_row, text="Ký & Gửi", style="Accent.TButton", command=self.sign_and_send).pack(
             side="left"
         )
@@ -459,7 +492,7 @@ class DigitalSignatureDemoApp:
         
         ttk.Label(frame, text="Chi tiết bên gửi:").grid(row=6, column=0, sticky="w")
         # Textbox hiển thị log của quá trình ký
-        self.sender_info = ScrolledText(frame, height=5, wrap="word", font=("Consolas", 10))
+        self.sender_info = ScrolledText(frame, height=7, wrap="word", font=("Consolas", 11))
         self.sender_info.grid(row=7, column=0, sticky="nsew")
         
         frame.rowconfigure(1, weight=1)
@@ -470,35 +503,40 @@ class DigitalSignatureDemoApp:
         frame.columnconfigure(0, weight=1)
         
         ttk.Label(frame, text="Nội dung gói tin hacker nhìn thấy:").grid(row=0, column=0, sticky="w")
-        self.hacker_message_text = ScrolledText(frame, height=5, wrap="word", font=("Segoe UI", 10))
+        self.hacker_message_text = ScrolledText(frame, height=7, wrap="word", font=("Segoe UI", 12))
         self.hacker_message_text.grid(row=1, column=0, sticky="nsew")
         
         ttk.Label(frame, text="Signature mà hacker nhìn thấy:").grid(row=2, column=0, sticky="w", pady=(8, 0))
         self.hacker_signature_var = tk.StringVar(value="")
-        ttk.Entry(frame, textvariable=self.hacker_signature_var).grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        ttk.Entry(frame, textvariable=self.hacker_signature_var).grid(row=3, column=0, sticky="ew", pady=(0, 10))
         
         ttk.Label(frame, text="Khóa công khai hacker gửi cho người nhận:", style="SubHeader.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(12, 4)
+            row=4, column=0, sticky="w", pady=(14, 6)
         )
         self.hacker_public_key_var = tk.StringVar(value="(e, n) = Chưa sửa")
-        ttk.Entry(frame, textvariable=self.hacker_public_key_var, state="readonly").grid(row=5, column=0, sticky="ew", pady=(0, 8))
+        ttk.Entry(frame, textvariable=self.hacker_public_key_var, state="readonly").grid(row=5, column=0, sticky="ew", pady=(0, 10))
         
         # Các nút giả lập hành vi phá hoại của Hacker
         button_row = ttk.Frame(frame)
-        button_row.grid(row=6, column=0, sticky="ew", pady=(8, 0))
-        ttk.Button(button_row, text="Sửa nội dung", command=self.tamper_message_sample).pack(side="left", padx=(0, 8))
-        ttk.Button(button_row, text="Sửa signature", command=self.tamper_signature_sample).pack(
-            side="left", padx=(0, 8)
+        button_row.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        button_row.columnconfigure(0, weight=1, uniform="hacker_buttons")
+        button_row.columnconfigure(1, weight=1, uniform="hacker_buttons")
+
+        ttk.Button(button_row, text="Sửa nội dung", command=self.tamper_message_sample).grid(
+            row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 6)
+        )
+        ttk.Button(button_row, text="Sửa signature", command=self.tamper_signature_sample).grid(
+            row=0, column=1, sticky="ew", padx=(6, 0), pady=(0, 6)
         )
         ttk.Button(
             button_row,
             text="Sửa public key",
             style="Accent.TButton",
             command=self.tamper_public_key,
-        ).pack(side="left", padx=(0, 8))
-        
-        ttk.Button(button_row, text="Chuyển tiếp", style="Accent.TButton", command=self.forward_packet).pack(
-            side="left"
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+        ttk.Button(button_row, text="Chuyển tiếp", style="Accent.TButton", command=self.forward_packet).grid(
+            row=1, column=1, sticky="ew", padx=(6, 0)
         )
         
         frame.rowconfigure(1, weight=1)
@@ -508,36 +546,36 @@ class DigitalSignatureDemoApp:
         frame.columnconfigure(0, weight=1)
         
         ttk.Label(frame, text="Thông điệp nhận được (Có thể bị mã hóa):").grid(row=0, column=0, sticky="w")
-        self.receiver_message_text = ScrolledText(frame, height=4, wrap="word", font=("Segoe UI", 10))
+        self.receiver_message_text = ScrolledText(frame, height=5, wrap="word", font=("Segoe UI", 12))
         self.receiver_message_text.grid(row=1, column=0, sticky="nsew")
         
         pwd_row = ttk.Frame(frame)
-        pwd_row.grid(row=2, column=0, sticky="ew", pady=(8, 8))
+        pwd_row.grid(row=2, column=0, sticky="ew", pady=(10, 10))
         ttk.Label(pwd_row, text="Mật khẩu giải mã (XOR):").pack(side="left")
-        ttk.Entry(pwd_row, textvariable=self.receiver_password_var, show="*").pack(side="left", fill="x", expand=True, padx=(8, 0))
+        ttk.Entry(pwd_row, textvariable=self.receiver_password_var, show="*").pack(side="left", fill="x", expand=True, padx=(10, 0))
         
         ttk.Label(frame, text="Thông điệp sau khi giải mã:").grid(row=3, column=0, sticky="w")
-        self.decrypted_message_text = ScrolledText(frame, height=4, wrap="word", font=("Segoe UI", 10))
+        self.decrypted_message_text = ScrolledText(frame, height=5, wrap="word", font=("Segoe UI", 12))
         self.decrypted_message_text.grid(row=4, column=0, sticky="nsew")
         
         ttk.Label(frame, text="Signature nhận được:").grid(row=5, column=0, sticky="w", pady=(8, 0))
         self.receiver_signature_var = tk.StringVar(value="")
-        ttk.Entry(frame, textvariable=self.receiver_signature_var).grid(row=6, column=0, sticky="ew", pady=(0, 8))
+        ttk.Entry(frame, textvariable=self.receiver_signature_var).grid(row=6, column=0, sticky="ew", pady=(0, 10))
         
         ttk.Label(frame, text="Khóa công khai đang dùng:").grid(row=7, column=0, sticky="w", pady=(8, 4))
         ttk.Entry(frame, textvariable=self.receiver_public_key_var, state="readonly").grid(row=8, column=0, sticky="ew")
         
         ttk.Button(frame, text="Giải mã & Kiểm tra", style="Accent.TButton", command=self.verify_received_packet).grid(
-            row=9, column=0, sticky="w", pady=(10, 0)
+            row=9, column=0, sticky="w", pady=(12, 0)
         )
-        
-        ttk.Label(frame, textvariable=self.receiver_result_var, style="SubHeader.TLabel", wraplength=400).grid(
-            row=10, column=0, sticky="w", pady=(8, 8)
+
+        ttk.Label(frame, textvariable=self.receiver_result_var, style="SubHeader.TLabel", wraplength=500).grid(
+            row=10, column=0, sticky="w", pady=(10, 10)
         )
         
         ttk.Label(frame, text="Chi tiết bên nhận:").grid(row=11, column=0, sticky="w")
         # Textbox hiển thị log chứng minh chữ ký đúng/sai
-        self.receiver_info = ScrolledText(frame, height=4, wrap="word", font=("Consolas", 10))
+        self.receiver_info = ScrolledText(frame, height=6, wrap="word", font=("Consolas", 11))
         self.receiver_info.grid(row=12, column=0, sticky="nsew")
         
         frame.rowconfigure(1, weight=1)

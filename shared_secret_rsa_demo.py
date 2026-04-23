@@ -34,9 +34,11 @@ class SharedSecretRSADemo:
         # Mật khẩu thu được của từng bên (sẽ hiển thị riêng) sau khi giải mã
         self.secret_received_A: int | None = None
         self.secret_received_B: int | None = None
+        self.shared_secret: int | None = None
         
         # Biến trạng thái UI
         self.status_var = tk.StringVar(value="Đang khởi tạo...")
+        self.shared_secret_var = tk.StringVar(value="Chưa tạo mật khẩu chung")
         
         # Dựng UI và tạo khóa tự động
         self._build_ui()
@@ -46,9 +48,26 @@ class SharedSecretRSADemo:
         """Xây dựng toàn bộ giao diện người dùng"""
         style = ttk.Style()
         style.theme_use("clam")
-        
-        main = ttk.Frame(self.root, padding=15)
-        main.pack(fill="both", expand=True)
+
+        canvas_container = ttk.Frame(self.root)
+        canvas_container.pack(fill="both", expand=True)
+
+        self.main_canvas = tk.Canvas(canvas_container, highlightthickness=0)
+        self.main_scrollbar = ttk.Scrollbar(
+            canvas_container,
+            orient="vertical",
+            command=self.main_canvas.yview,
+        )
+        self.main_canvas.configure(yscrollcommand=self.main_scrollbar.set)
+
+        self.main_scrollbar.pack(side="right", fill="y")
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+
+        main = ttk.Frame(self.main_canvas, padding=15)
+        self.main_canvas_window = self.main_canvas.create_window((0, 0), window=main, anchor="nw")
+        main.bind("<Configure>", self._update_scroll_region)
+        self.main_canvas.bind("<Configure>", self._resize_canvas_content)
+        self.main_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         
         # Tiêu đề
         ttk.Label(main, 
@@ -84,6 +103,19 @@ class SharedSecretRSADemo:
         
         # Thanh trạng thái
         ttk.Label(main, textvariable=self.status_var, foreground="blue").pack(anchor="w", pady=(20, 0))
+
+    def _update_scroll_region(self, _event):
+        """Cập nhật vùng cuộn khi nội dung thay đổi kích thước."""
+        self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+
+    def _resize_canvas_content(self, event):
+        """Giữ nội dung khớp chiều rộng vùng nhìn thấy."""
+        self.main_canvas.itemconfigure(self.main_canvas_window, width=event.width)
+
+    def _on_mousewheel(self, event):
+        """Cho phép cuộn toàn bộ cửa sổ bằng con lăn chuột."""
+        if event.delta:
+            self.main_canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def _build_key_frame(self, frame):
         """Xây dựng phần hiển thị và nút tạo khóa RSA"""
@@ -129,29 +161,54 @@ class SharedSecretRSADemo:
 
     def _build_shared_secret_frame(self, frame):
         """Xây dựng 2 hộp hiển thị mật khẩu thu được riêng của từng bên"""
+        frame.columnconfigure(0, weight=1)
+
         # Kết quả tính toán của Bên A
         ttk.Label(frame, text="Mật khẩu thu được bên A:", 
-                  font=("Segoe UI", 10, "bold")).pack(anchor="w")
+                  font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
         self.secret_a_label = ttk.Label(frame, 
                                         text="Chưa có dữ liệu", 
                                         font=("Consolas", 12), 
                                         foreground="blue")
-        self.secret_a_label.pack(anchor="w", pady=(0, 12))
+        self.secret_a_label.grid(row=1, column=0, sticky="w", pady=(0, 12))
         
         # Kết quả tính toán của Bên B
         ttk.Label(frame, text="Mật khẩu thu được bên B:", 
-                  font=("Segoe UI", 10, "bold")).pack(anchor="w")
+                  font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="w")
         self.secret_b_label = ttk.Label(frame, 
                                         text="Chưa có dữ liệu", 
                                         font=("Consolas", 12), 
                                         foreground="blue")
-        self.secret_b_label.pack(anchor="w", pady=(0, 12))
+        self.secret_b_label.grid(row=3, column=0, sticky="w", pady=(0, 12))
         
         # Nút tính toán chung
         ttk.Button(frame, 
                    text="🔑 Tạo Mật khẩu Chung (Shared Secret)", 
                    style="Accent.TButton", 
-                   command=self.create_shared_secret).pack(pady=10)
+                   command=self.create_shared_secret).grid(row=4, column=0, sticky="w", pady=(6, 10))
+
+        ttk.Label(frame, text="Mật khẩu chung cuối cùng:", 
+                  font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", pady=(4, 6))
+
+        copy_row = ttk.Frame(frame)
+        copy_row.grid(row=6, column=0, sticky="ew")
+        copy_row.columnconfigure(0, weight=1)
+
+        self.shared_secret_entry = ttk.Entry(
+            copy_row,
+            textvariable=self.shared_secret_var,
+            state="readonly",
+            font=("Consolas", 11),
+        )
+        self.shared_secret_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+
+        self.copy_secret_button = ttk.Button(
+            copy_row,
+            text="Sao chép mật khẩu chung",
+            command=self.copy_shared_secret,
+            state="disabled",
+        )
+        self.copy_secret_button.grid(row=0, column=1, sticky="e")
 
     def generate_keys(self):
         """Tạo cặp khóa RSA mới cho cả bên A và bên B"""
@@ -176,8 +233,11 @@ class SharedSecretRSADemo:
         # Reset các trạng thái của dữ liệu mật khẩu thu được
         self.secret_received_A = None
         self.secret_received_B = None
+        self.shared_secret = None
+        self.shared_secret_var.set("Chưa tạo mật khẩu chung")
         self.secret_a_label.config(text="Chưa có dữ liệu")
         self.secret_b_label.config(text="Chưa có dữ liệu")
+        self.copy_secret_button.config(state="disabled")
         self.status_var.set("Đã tạo khóa mới cho A và B. Hãy gửi số bí mật cho nhau.")
 
     def send_secret(self, from_side: str):
@@ -268,12 +328,26 @@ class SharedSecretRSADemo:
             text=f"{self.shared_secret}\n"
                  f"(Bên B tính từ số bí mật nhận được từ A)"
         )
-        
+
+        self.shared_secret_var.set(str(self.shared_secret))
+        self.copy_secret_button.config(state="normal")
         self.status_var.set("Mật khẩu chung đã được tạo thành công cho cả hai bên!")
         messagebox.showinfo("Thành công", 
             f"Mật khẩu chung đã được tạo!\n\n"
             f"Giá trị: {self.shared_secret}\n\n"
             "Cả hai bên đều tính ra được cùng một mật khẩu mà không cần gửi trực tiếp.")
+
+    def copy_shared_secret(self):
+        """Sao chép mật khẩu chung vào clipboard."""
+        if self.shared_secret is None:
+            messagebox.showwarning("Chưa có mật khẩu chung", "Hãy tạo mật khẩu chung trước khi sao chép.")
+            return
+
+        self.root.clipboard_clear()
+        self.root.clipboard_append(str(self.shared_secret))
+        self.root.update()
+        self.status_var.set("Đã sao chép mật khẩu chung vào clipboard.")
+        messagebox.showinfo("Đã sao chép", f"Đã sao chép mật khẩu chung: {self.shared_secret}")
 
     # ====================== CÁC HÀM HỖ TRỢ RSA ======================
     # Tương tự như file số 1
